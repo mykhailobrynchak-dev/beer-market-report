@@ -224,40 +224,6 @@ OPERATIONAL_WEEKLY = OPERATIONAL_MONTHLY.replace(
     f"AND f.order_created_date >= '{WEEKLY_START}'\n  AND f.order_created_date <= '{WEEKLY_END}'",
 )
 
-REPLACEMENT_ADJUSTMENT_MONTHLY = f"""
-SELECT
-    DATE_FORMAT(f.metric_timestamp_local, 'yyyy-MM') AS period,
-    ROUND(SUM(f.order_item_adjustment_rate_value * f.order_item_adjustment_rate_weight)
-        / NULLIF(SUM(f.order_item_adjustment_rate_weight), 0) * 100, 2) AS adjustment_rate,
-    ROUND(SUM(f.order_item_replacement_rate_value * f.order_item_replacement_rate_weight)
-        / NULLIF(SUM(f.order_item_replacement_rate_weight), 0) * 100, 2) AS replacement_rate
-FROM hive_metastore.ng_delivery_spark.fact_provider_weekly f
-    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
-WHERE p.country_code = 'ua'
-  AND p.group_name = '{PARTNER_NAME}'
-  AND f.metric_timestamp_local >= '{DATA_START}'
-  AND f.metric_timestamp_local <= '{DATA_END}'
-GROUP BY 1
-ORDER BY 1
-"""
-
-REPLACEMENT_ADJUSTMENT_WEEKLY = f"""
-SELECT
-    DATE_FORMAT(f.metric_timestamp_local, 'yyyy-MM-dd') AS period,
-    ROUND(SUM(f.order_item_adjustment_rate_value * f.order_item_adjustment_rate_weight)
-        / NULLIF(SUM(f.order_item_adjustment_rate_weight), 0) * 100, 2) AS adjustment_rate,
-    ROUND(SUM(f.order_item_replacement_rate_value * f.order_item_replacement_rate_weight)
-        / NULLIF(SUM(f.order_item_replacement_rate_weight), 0) * 100, 2) AS replacement_rate
-FROM hive_metastore.ng_delivery_spark.fact_provider_weekly f
-    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
-WHERE p.country_code = 'ua'
-  AND p.group_name = '{PARTNER_NAME}'
-  AND f.metric_timestamp_local >= '{WEEKLY_START}'
-  AND f.metric_timestamp_local <= '{WEEKLY_END}'
-GROUP BY 1
-ORDER BY 1
-"""
-
 FAILED_ORDERS_MONTHLY = f"""
 SELECT
     DATE_FORMAT(f.order_created_date, 'yyyy-MM') AS period,
@@ -447,10 +413,6 @@ def main():
     ops_m = to_serializable(run_query(cursor, OPERATIONAL_MONTHLY))
     ops_w = to_serializable(run_query(cursor, OPERATIONAL_WEEKLY))
 
-    print("Fetching replacement/adjustment rates...")
-    repl_m = to_serializable(run_query(cursor, REPLACEMENT_ADJUSTMENT_MONTHLY))
-    repl_w = to_serializable(run_query(cursor, REPLACEMENT_ADJUSTMENT_WEEKLY))
-
     print("Fetching failed orders...")
     fail_m = to_serializable(run_query(cursor, FAILED_ORDERS_MONTHLY))
     fail_w = to_serializable(run_query(cursor, FAILED_ORDERS_WEEKLY))
@@ -485,7 +447,6 @@ def main():
         "monthly": {
             "financial": fin_m,
             "operational": ops_m,
-            "replacement_adjustment": repl_m,
             "failed_orders": fail_m,
             "failed_reasons": fail_reasons_m,
             "campaigns": camp_m,
@@ -494,7 +455,6 @@ def main():
         "weekly": {
             "financial": fin_w,
             "operational": ops_w,
-            "replacement_adjustment": repl_w,
             "failed_orders": fail_w,
             "failed_reasons": fail_reasons_w,
             "campaigns": camp_w,

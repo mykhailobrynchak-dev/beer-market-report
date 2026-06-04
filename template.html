@@ -121,15 +121,6 @@ tr:hover{background:#f9fafb}
     <div class="card"><h3>Запізнення доставки / збирання, %</h3><div class="chart-box"><canvas id="m-cLate"></canvas></div></div>
   </div>
   <div class="divider" style="margin:20px 0"></div>
-  <h3 style="font-size:16px;margin-bottom:14px">Коригування та заміна товарів</h3>
-  <div class="grid-2">
-    <div class="card"><h3>Коригування замовлень (Adjustment), %</h3><div class="chart-box"><canvas id="m-cAdjust"></canvas></div></div>
-    <div class="card"><h3>Заміна товарів (Replacement), %</h3><div class="chart-box"><canvas id="m-cReplace"></canvas></div></div>
-  </div>
-  <div class="insight" style="margin-top:10px">
-    <div class="insight-text">Заміна товарів (Replacement) є підмножиною коригувань (Adjustment). Тобто Replacement — це лише частина від загального Adjustment Rate, коли товар замінюється на інший, а не просто коригується ціна чи кількість.</div>
-  </div>
-  <div class="divider" style="margin:20px 0"></div>
   <h3 style="font-size:16px;margin-bottom:14px">Активні заклади, доступність та рейтинг</h3>
   <div class="grid-2">
     <div class="card"><h3>Активні заклади / Доступність, %</h3><div class="chart-box"><canvas id="m-cMerchants"></canvas></div></div>
@@ -231,15 +222,6 @@ tr:hover{background:#f9fafb}
     <div class="card"><h3>Запізнення доставки / збирання, %</h3><div class="chart-box"><canvas id="w-cLate"></canvas></div></div>
   </div>
   <div class="divider" style="margin:20px 0"></div>
-  <h3 style="font-size:16px;margin-bottom:14px">Коригування та заміна товарів</h3>
-  <div class="grid-2">
-    <div class="card"><h3>Коригування замовлень (Adjustment), %</h3><div class="chart-box"><canvas id="w-cAdjust"></canvas></div></div>
-    <div class="card"><h3>Заміна товарів (Replacement), %</h3><div class="chart-box"><canvas id="w-cReplace"></canvas></div></div>
-  </div>
-  <div class="insight" style="margin-top:10px">
-    <div class="insight-text">Заміна товарів (Replacement) є підмножиною коригувань (Adjustment). Тобто Replacement — це лише частина від загального Adjustment Rate, коли товар замінюється на інший, а не просто коригується ціна чи кількість.</div>
-  </div>
-  <div class="divider" style="margin:20px 0"></div>
   <h3 style="font-size:16px;margin-bottom:14px">Активні заклади, доступність та рейтинг</h3>
   <div class="grid-2">
     <div class="card"><h3>Активні заклади / Доступність, %</h3><div class="chart-box"><canvas id="w-cMerchants"></canvas></div></div>
@@ -327,7 +309,7 @@ const defOpts = {
 
 function dualY(l,r){return{...defOpts,scales:{...defOpts.scales,y:{...defOpts.scales.y,title:{display:true,text:l,color:'#9ca3af'}},y1:{...defOpts.scales.y,position:'right',title:{display:true,text:r,color:'#9ca3af'},grid:{drawOnChartArea:false}}}}}
 
-function mergeData(finArr, opsArr, replArr, failArr, aaArr) {
+function mergeData(finArr, opsArr, failArr, aaArr) {
   const map = {};
   const addToMap = (arr, prefix) => {
     if (!arr) return;
@@ -341,7 +323,6 @@ function mergeData(finArr, opsArr, replArr, failArr, aaArr) {
   };
   addToMap(finArr, 'fin');
   addToMap(opsArr, 'ops');
-  addToMap(replArr, 'repl');
   addToMap(failArr, 'fail');
   addToMap(aaArr, 'aa');
   return Object.values(map).sort((a,b) => a.period.localeCompare(b.period));
@@ -392,8 +373,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // ─── Render ───
 const D = REPORT_DATA;
-const mData = mergeData(D.monthly.financial, D.monthly.operational, D.monthly.replacement_adjustment, D.monthly.failed_orders, D.monthly.acceptance_availability);
-const wData = mergeData(D.weekly.financial, D.weekly.operational, D.weekly.replacement_adjustment, D.weekly.failed_orders, D.weekly.acceptance_availability);
+const mData = mergeData(D.monthly.financial, D.monthly.operational, D.monthly.failed_orders, D.monthly.acceptance_availability);
+const wData = mergeData(D.weekly.financial, D.weekly.operational, D.weekly.failed_orders, D.weekly.acceptance_availability);
 
 // Header
 const periods = mData.map(d => d.period);
@@ -459,9 +440,6 @@ function renderCharts(prefix, data, labelFn) {
     {label:'Запізнення доставки %', data:data.map(d=>d.ops_late_delivery_rate), borderColor:'#dc2626', tension:.3, fill:false},
     {label:'Запізнення збирання %', data:data.map(d=>d.ops_late_pickup_rate), borderColor:'#ea580c', tension:.3, fill:false}
   ]}, options:defOpts});
-
-  new Chart(document.getElementById(prefix+'-cAdjust'), {type:'line', data:{labels, datasets:[{label:'Коригування %', data:data.map(d=>d.repl_adjustment_rate), borderColor:'#d97706', tension:.3, pointRadius:5, pointBackgroundColor:'#d97706'}]}, options:defOpts});
-  new Chart(document.getElementById(prefix+'-cReplace'), {type:'line', data:{labels, datasets:[{label:'Заміна товарів %', data:data.map(d=>d.repl_replacement_rate), borderColor:'#d97706', tension:.3, pointRadius:5, pointBackgroundColor:'#d97706'}]}, options:defOpts});
 
   new Chart(document.getElementById(prefix+'-cMerchants'), {type:'bar', data:{labels, datasets:[
     {label:'Активні заклади', data:data.map(d=>d.ops_active_stores), backgroundColor:'rgba(52,209,134,0.4)', borderRadius:3, yAxisID:'y'},
@@ -552,8 +530,6 @@ renderCharts('m', mData, shortMonth);
     {name:'Запізнення доставки', desc:'', key:'ops_late_delivery_rate', fmt:pct, inv:true},
     {name:'Запізнення збирання', desc:'', key:'ops_late_pickup_rate', fmt:pct, inv:true},
     {name:'Час доставки (хв)', desc:'', key:'ops_avg_delivery_minutes', fmt:v=>n(v,1), inv:true},
-    {name:'Коригування замовлень', desc:'Adjustment', key:'repl_adjustment_rate', fmt:pct, inv:true},
-    {name:'  ↳ Заміна товарів', desc:'Replacement (підмножина)', key:'repl_replacement_rate', fmt:pct, inv:true},
     {name:'Активні заклади', desc:'', key:'ops_active_stores', fmt:fmt, inv:false},
     {name:'Доступність', desc:'', key:'aa_availability_rate', fmt:pct, inv:false},
     {name:'Прийняття замовлень', desc:'', key:'aa_acceptance_rate', fmt:pct, inv:false},
