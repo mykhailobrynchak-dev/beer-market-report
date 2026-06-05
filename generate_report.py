@@ -396,6 +396,108 @@ ORDER BY merchant_price_uah DESC
 LIMIT 15
 """
 
+NETWORK_STORES = f"""
+SELECT
+    p.provider_id,
+    p.provider_name,
+    p.city_name
+FROM hive_metastore.ng_delivery_spark.dim_provider_v2 p
+WHERE p.country_code = 'ua'
+  AND p.group_name = '{PARTNER_NAME}'
+  AND (
+    (p.provider_status = 'active' AND p.lifecycle_status = 'ready_for_work')
+    OR (p.provider_status = 'hidden' AND p.lifecycle_status = 'hidden')
+  )
+ORDER BY p.provider_name
+LIMIT 1000
+"""
+
+STORE_WEEKLY = f"""
+SELECT
+    DATE_FORMAT(DATE_TRUNC('week', f.order_created_date), 'yyyy-MM-dd') AS period,
+    f.provider_id,
+    f.provider_name,
+    f.city_name,
+    COUNT(*) AS orders,
+    SUM(f.provider_price_before_discount) AS merchant_price_uah,
+    SUM(f.provider_price_before_discount) / NULLIF(COUNT(*), 0) AS aov_uah
+FROM hive_metastore.ng_delivery_spark.fact_order_delivery f
+    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
+WHERE p.country_code = 'ua'
+  AND p.group_name = '{PARTNER_NAME}'
+  AND f.order_state = 'delivered'
+  AND f.order_created_date >= '{WEEKLY_START}'
+  AND f.order_created_date <= '{WEEKLY_END}'
+GROUP BY 1, 2, 3, 4
+ORDER BY 1, orders DESC
+LIMIT 5000
+"""
+
+STORE_QUALITY_WEEKLY = f"""
+SELECT
+    DATE_FORMAT(f.metric_timestamp_local, 'yyyy-MM-dd') AS period,
+    f.provider_id,
+    p.provider_name,
+    ROUND(SUM(f.provider_active_rate_value * f.provider_active_rate_weight)
+        / NULLIF(SUM(f.provider_active_rate_weight), 0) * 100, 1) AS availability_rate,
+    ROUND(SUM(f.provider_acceptance_rate_value * f.provider_acceptance_rate_weight)
+        / NULLIF(SUM(f.provider_acceptance_rate_weight), 0) * 100, 1) AS acceptance_rate,
+    ROUND(SUM(f.provider_rating_per_order_value * f.provider_rating_per_order_weight)
+        / NULLIF(SUM(f.provider_rating_per_order_weight), 0), 3) AS avg_rating
+FROM hive_metastore.ng_delivery_spark.fact_provider_weekly f
+    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
+WHERE p.country_code = 'ua'
+  AND p.group_name = '{PARTNER_NAME}'
+  AND f.metric_timestamp_local >= '{WEEKLY_START}'
+  AND f.metric_timestamp_local <= '{WEEKLY_END}'
+GROUP BY 1, 2, 3
+ORDER BY 1, 3
+LIMIT 5000
+"""
+
+STORE_RATINGS_WEEKLY = f"""
+SELECT
+    DATE_FORMAT(DATE_TRUNC('week', r.created_date), 'yyyy-MM-dd') AS period,
+    p.provider_id,
+    AVG(r.rating_value) AS avg_review_rating,
+    COUNT(*) AS reviews_count,
+    SUM(CASE WHEN r.comment IS NOT NULL AND LENGTH(TRIM(r.comment)) > 0 THEN 1 ELSE 0 END) AS comments_count
+FROM hive_metastore.ng_delivery_spark.delivery_rating_provider_rating_history r
+    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON r.provider_id = p.provider_id
+WHERE p.country_code = 'ua'
+  AND p.group_name = '{PARTNER_NAME}'
+  AND r.created_date >= '{WEEKLY_START}'
+  AND r.created_date <= '{WEEKLY_END}'
+  AND COALESCE(r.ignore_rating, false) = false
+GROUP BY 1, 2
+ORDER BY 1, 2
+LIMIT 5000
+"""
+
+CUSTOMER_REVIEWS_WEEKLY = f"""
+SELECT
+    DATE_FORMAT(DATE_TRUNC('week', r.created_date), 'yyyy-MM-dd') AS period,
+    p.provider_id,
+    p.provider_name,
+    p.city_name,
+    r.rating_value,
+    r.comment,
+    CAST(r.created AS STRING) AS created_at,
+    f.order_reference_id
+FROM hive_metastore.ng_delivery_spark.delivery_rating_provider_rating_history r
+    JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON r.provider_id = p.provider_id
+    LEFT JOIN hive_metastore.ng_delivery_spark.fact_order_delivery f ON r.order_id = f.order_id
+WHERE p.country_code = 'ua'
+  AND p.group_name = '{PARTNER_NAME}'
+  AND r.created_date >= '{WEEKLY_START}'
+  AND r.created_date <= '{WEEKLY_END}'
+  AND r.comment IS NOT NULL
+  AND LENGTH(TRIM(r.comment)) > 0
+  AND COALESCE(r.ignore_rating, false) = false
+ORDER BY r.created DESC
+LIMIT 2000
+"""
+
 
 def main():
     print(f"Partner: {PARTNER_DISPLAY} ({PARTNER_NAME})")
@@ -433,6 +535,35 @@ def main():
     print("Fetching top stores...")
     top_stores = to_serializable(run_query(cursor, TOP_STORES_LAST_MONTH))
 
+    print("Fetching network stores (Bolt catalogue)...")
+    network_stores = to_serializable(run_query(cursor, NETWORK_STORES))
+    network_store_count = len(network_stores)
+
+    print("Fetching store-level weekly orders...")
+    store_weekly = to_serializable(run_query(cursor, STORE_WEEKLY))
+
+    print("Fetching store-level weekly quality (rating/availability)...")
+    store_quality = to_serializable(run_query(cursor, STORE_QUALITY_WEEKLY))
+
+    print("Fetching store-level weekly review counts/avg...")
+    store_ratings = to_serializable(run_query(cursor, STORE_RATINGS_WEEKLY))
+
+    print("Fetching customer text reviews...")
+    customer_reviews = to_serializable(run_query(cursor, CUSTOMER_REVIEWS_WEEKLY))
+
+    quality_map = {(q["period"], q["provider_id"]): q for q in store_quality}
+    ratings_map = {(r["period"], r["provider_id"]): r for r in store_ratings}
+    for entry in store_weekly:
+        key = (entry["period"], entry["provider_id"])
+        q = quality_map.get(key, {})
+        r = ratings_map.get(key, {})
+        entry["availability_rate"] = q.get("availability_rate")
+        entry["acceptance_rate"] = q.get("acceptance_rate")
+        entry["avg_rating"] = q.get("avg_rating")
+        entry["avg_review_rating"] = r.get("avg_review_rating")
+        entry["reviews_count"] = r.get("reviews_count", 0)
+        entry["comments_count"] = r.get("comments_count", 0)
+
     cursor.close()
     conn.close()
 
@@ -462,6 +593,10 @@ def main():
         },
         "acceptance_current": aa_current,
         "top_stores": top_stores,
+        "network_stores": network_stores,
+        "network_store_count": network_store_count,
+        "store_weekly": store_weekly,
+        "customer_reviews": customer_reviews,
     }
 
     DATA_PATH.write_text(
