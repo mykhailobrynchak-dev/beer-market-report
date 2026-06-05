@@ -404,10 +404,8 @@ SELECT
 FROM hive_metastore.ng_delivery_spark.dim_provider_v2 p
 WHERE p.country_code = 'ua'
   AND p.group_name = '{PARTNER_NAME}'
-  AND (
-    (p.provider_status = 'active' AND p.lifecycle_status = 'ready_for_work')
-    OR (p.provider_status = 'hidden' AND p.lifecycle_status = 'hidden')
-  )
+  AND p.provider_status = 'active'
+  AND p.lifecycle_status = 'ready_for_work'
 ORDER BY p.provider_name
 LIMIT 1000
 """
@@ -425,6 +423,8 @@ FROM hive_metastore.ng_delivery_spark.fact_order_delivery f
     JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
 WHERE p.country_code = 'ua'
   AND p.group_name = '{PARTNER_NAME}'
+  AND p.provider_status = 'active'
+  AND p.lifecycle_status = 'ready_for_work'
   AND f.order_state = 'delivered'
   AND f.order_created_date >= '{WEEKLY_START}'
   AND f.order_created_date <= '{WEEKLY_END}'
@@ -448,6 +448,8 @@ FROM hive_metastore.ng_delivery_spark.fact_provider_weekly f
     JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON f.provider_id = p.provider_id
 WHERE p.country_code = 'ua'
   AND p.group_name = '{PARTNER_NAME}'
+  AND p.provider_status = 'active'
+  AND p.lifecycle_status = 'ready_for_work'
   AND f.metric_timestamp_local >= '{WEEKLY_START}'
   AND f.metric_timestamp_local <= '{WEEKLY_END}'
 GROUP BY 1, 2, 3
@@ -466,6 +468,8 @@ FROM hive_metastore.ng_delivery_spark.delivery_rating_provider_rating_history r
     JOIN hive_metastore.ng_delivery_spark.dim_provider_v2 p ON r.provider_id = p.provider_id
 WHERE p.country_code = 'ua'
   AND p.group_name = '{PARTNER_NAME}'
+  AND p.provider_status = 'active'
+  AND p.lifecycle_status = 'ready_for_work'
   AND r.created_date >= '{WEEKLY_START}'
   AND r.created_date <= '{WEEKLY_END}'
   AND COALESCE(r.ignore_rating, false) = false
@@ -489,6 +493,8 @@ FROM hive_metastore.ng_delivery_spark.delivery_rating_provider_rating_history r
     LEFT JOIN hive_metastore.ng_delivery_spark.fact_order_delivery f ON r.order_id = f.order_id
 WHERE p.country_code = 'ua'
   AND p.group_name = '{PARTNER_NAME}'
+  AND p.provider_status = 'active'
+  AND p.lifecycle_status = 'ready_for_work'
   AND r.created_date >= '{WEEKLY_START}'
   AND r.created_date <= '{WEEKLY_END}'
   AND r.comment IS NOT NULL
