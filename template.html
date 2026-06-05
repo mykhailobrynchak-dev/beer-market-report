@@ -932,7 +932,7 @@ if (wData.length) {
       const expandIcon = hasReviews ? '<span class="expand-icon">▶</span>' : '<span class="expand-icon" style="visibility:hidden">▶</span>';
       const rowClass = (hasReviews ? 'store-clickable ' : '') + (inactive ? 'row-inactive' : '');
       const storeName = m.store.provider_name || '';
-      const statusBadge = inactive ? ' <span class="store-status">неактивний (0 замовл.)</span>' : '';
+      const statusBadge = inactive ? ' <span class="store-status">(0 замовл.)</span>' : '';
       html += `<tr class="${rowClass.trim()}" data-store-id="${sid}" data-period="${period}">`;
       html += `<td>${expandIcon}</td>`;
       html += `<td style="white-space:nowrap;max-width:320px;overflow:hidden;text-overflow:ellipsis" title="${escapeHtml(storeName)}">${escapeHtml(storeName)}${statusBadge}</td>`;
@@ -940,7 +940,9 @@ if (wData.length) {
       html += `<td class="col-group-start">${inactive ? '—' : fmt(c.orders)}</td><td class="col-group-end">${inactive ? '—' : wowBadge(Number(c.orders), Number(p?.orders))}</td>`;
       html += `<td class="col-group-start">${inactive ? '—' : fmt(Math.round(Number(c.merchant_price_uah) || 0))}</td><td class="col-group-end">${inactive ? '—' : wowBadge(Number(c.merchant_price_uah), Number(p?.merchant_price_uah))}</td>`;
       html += `<td>${inactive ? '—' : (Number(c.orders) ? uah(Number(c.merchant_price_uah || 0) / Number(c.orders)) : '—')}</td>`;
-      html += `<td class="col-group-start" style="color:${!inactive && c.availability_rate != null && Number(c.availability_rate) < 90 ? 'var(--red)' : !inactive && Number(c.availability_rate) >= 98 ? 'var(--green)' : ''}">${inactive ? '—' : pct(c.availability_rate)}</td>`;
+      const availVal = c?.availability_rate;
+      const availColor = availVal != null && Number(availVal) < 90 ? 'var(--red)' : Number(availVal) >= 98 ? 'var(--green)' : '';
+      html += `<td class="col-group-start" style="color:${availColor}">${availVal != null ? pct(availVal) : '—'}</td>`;
       html += `<td class="col-group-end">${inactive ? '—' : pct(c.acceptance_rate)}</td>`;
       html += `<td class="col-group-start"><span class="rating-pill" style="background:${inactive ? '#9ca3af' : ratingColor}">${inactive || c.avg_rating == null ? '—' : n(c.avg_rating, 2)}</span></td>`;
       html += `<td class="col-group-end">${inactive ? '—' : fmt(c.reviews_count)}</td>`;

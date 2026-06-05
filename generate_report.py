@@ -564,6 +564,33 @@ def main():
         entry["reviews_count"] = r.get("reviews_count", 0)
         entry["comments_count"] = r.get("comments_count", 0)
 
+    # Магазин може мати 0 замовлень за тиждень, але все одно бути доступним у Bolt-каталозі
+    # (Availability > 0). Створюємо синтетичні рядки store_weekly з orders=0, щоб такі точки
+    # відображались у вкладці "Магазини" з показником Availability %.
+    existing_keys = {(e["period"], e["provider_id"]) for e in store_weekly}
+    provider_info = {s["provider_id"]: s for s in network_stores}
+    for q in store_quality:
+        key = (q["period"], q["provider_id"])
+        if key in existing_keys:
+            continue
+        info = provider_info.get(q["provider_id"], {})
+        r = ratings_map.get(key, {})
+        store_weekly.append({
+            "period": q["period"],
+            "provider_id": q["provider_id"],
+            "provider_name": q.get("provider_name") or info.get("provider_name"),
+            "city_name": info.get("city_name"),
+            "orders": 0,
+            "merchant_price_uah": 0,
+            "aov_uah": None,
+            "availability_rate": q.get("availability_rate"),
+            "acceptance_rate": q.get("acceptance_rate"),
+            "avg_rating": q.get("avg_rating"),
+            "avg_review_rating": r.get("avg_review_rating"),
+            "reviews_count": r.get("reviews_count", 0),
+            "comments_count": r.get("comments_count", 0),
+        })
+
     cursor.close()
     conn.close()
 
